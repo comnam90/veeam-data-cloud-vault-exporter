@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Veeam Data Cloud Vault Exporter",
+  "short_name": "VDC Vault Exporter",
+  "version": "1.0.0",
+  "description": "Exports Veeam Data Cloud Vault data to CSV.",
+  "permissions": [
+    "downloads",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://cloud.veeam.com/*",
+    "https://stage.cloud.veeam.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "logo.png"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}

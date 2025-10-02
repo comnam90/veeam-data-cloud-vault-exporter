@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="flatpickr.min.css">
+  <link rel="stylesheet" href="flatpickr-monthSelect.css">
+  <style>
+    /* VDC Portal Color Scheme */
+    :root {
+      --vdc-green: #00d15f;
+      --vdc-green-hover: #00be54;
+      --vdc-green-dark: #00ab4a;
+      --vdc-grey-90: #1b1e21;
+      --vdc-grey-70: #3e454c;
+      --vdc-grey-60: #505861;
+      --vdc-grey-30: #b2b7b9;
+      --vdc-grey-15: #e3e5e6;
+      --vdc-grey-10: #f3f4f4;
+      --vdc-grey-5: #f9fafa;
+      --vdc-white: #fff;
+      --vdc-red: #dc3545;
+      --vdc-orange: #fd7e14;
+    }
+    
+    * {
+      box-sizing: border-box;
+    }
+
+    /* Prevent line-height inheritance into browser's native UI components */
+    html {
+      line-height: normal;
+    }
+    
+    body { 
+      width: 360px; 
+      padding: 24px; 
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 14px; 
+      line-height: 1.5;
+      color: var(--vdc-grey-90);
+      background: linear-gradient(135deg, #fafafa 0%, #ffffff 100%);
+      margin: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    
+    /* Expand popup when calendar is open to prevent clipping */
+    body.calendar-is-open {
+      min-height: 520px;
+    }
+    
+    h3 { 
+      margin: 0 0 24px 0; 
+      font-size: 22px; 
+      font-weight: 700;
+      color: var(--vdc-grey-90);
+      text-align: left;
+      letter-spacing: -0.03em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    
+    h3::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 24px;
+      background: linear-gradient(180deg, var(--vdc-green) 0%, var(--vdc-green-dark) 100%);
+      border-radius: 2px;
+    }
+    
+    button { 
+      width: 100%; 
+      padding: 12px 20px; 
+      font-size: 14px; 
+      font-weight: 600;
+      cursor: pointer;
+      background: linear-gradient(135deg, var(--vdc-green) 0%, var(--vdc-green-hover) 100%);
+      color: var(--vdc-white);
+      border: none;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(0, 209, 95, 0.2), 0 1px 2px rgba(0, 0, 0, 0.05);
+      position: relative;
+      overflow: hidden;
+    }
+    
+    button::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%);
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    
+    button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 209, 95, 0.3), 0 2px 4px rgba(0, 0, 0, 0.08);
+    }
+    
+    button:hover::before {
+      opacity: 1;
+    }
+    
+    button:active {
+      transform: translateY(0);
+      box-shadow: 0 1px 4px rgba(0, 209, 95, 0.3), 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+    
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+    
+    #status { 
+      margin-top: 16px; 
+      font-size: 13px;
+      text-align: left;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-weight: 500;
+      display: none;
+      animation: slideIn 0.3s ease;
+    }
+    
+    #status:not(:empty) {
+      display: block;
+    }
+    
+    @keyframes slideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    #status.error { 
+      color: var(--vdc-red);
+      background: linear-gradient(135deg, rgba(220, 53, 69, 0.12) 0%, rgba(220, 53, 69, 0.08) 100%);
+      border-left: 3px solid var(--vdc-red);
+    }
+    
+    #status.success { 
+      color: var(--vdc-green-dark);
+      background: linear-gradient(135deg, rgba(0, 209, 95, 0.12) 0%, rgba(0, 209, 95, 0.08) 100%);
+      border-left: 3px solid var(--vdc-green);
+    }
+    
+    #status.warning { 
+      color: var(--vdc-orange);
+      background: linear-gradient(135deg, rgba(253, 126, 20, 0.12) 0%, rgba(253, 126, 20, 0.08) 100%);
+      border-left: 3px solid var(--vdc-orange);
+    }
+    
+    #filters { 
+      margin: 0 0 20px 0; 
+      font-size: 13px; 
+      text-align: left;
+      padding: 16px;
+      background-color: var(--vdc-white);
+      border-radius: 10px;
+      border: 1px solid var(--vdc-grey-15);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+      transition: all 0.2s ease;
+    }
+    
+    #filters:hover {
+      border-color: var(--vdc-grey-30);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+    }
+    
+    #filters > label { 
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      font-weight: 600;
+      color: var(--vdc-grey-90);
+      gap: 10px;
+      user-select: none;
+    }
+    
+    #filters input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      accent-color: var(--vdc-green);
+    }
+    
+    #dateInputs { 
+      margin-top: 16px;
+      padding-left: 0;
+      display: none;
+      animation: fadeIn 0.3s ease;
+    }
+    
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        max-height: 0;
+      }
+      to {
+        opacity: 1;
+        max-height: 200px;
+      }
+    }
+    
+    #dateInputs label { 
+      display: flex;
+      flex-direction: column;
+      margin: 12px 0 0 0;
+      font-size: 12px;
+      color: var(--vdc-grey-70);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    
+    #dateInputs label:first-child {
+      margin-top: 0;
+    }
+    
+    #dateInputs input[type="text"] { 
+      width: 100%; 
+      font-size: 14px; 
+      padding: 9px 12px;
+      margin-top: 6px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      border: 1.5px solid var(--vdc-grey-15);
+      border-radius: 6px;
+      background-color: var(--vdc-white);
+      color: var(--vdc-grey-90);
+      transition: all 0.2s ease;
+      height: 40px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+    
+    #dateInputs input[type="text"]:hover {
+      border-color: var(--vdc-grey-30);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    
+    #dateInputs input[type="text"]:focus {
+      outline: none;
+      border-color: var(--vdc-green);
+      box-shadow: 0 0 0 3px rgba(0, 209, 95, 0.12), 0 1px 3px rgba(0, 0, 0, 0.05);
+    }
+    
+    #dateInputs input[type="text"]::placeholder {
+      color: var(--vdc-grey-30);
+    }
+    
+    /* Flatpickr custom styling */
+    .flatpickr-calendar {
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--vdc-grey-15);
+      margin-top: 4px;
+      z-index: 9999 !important;
+      position: absolute !important;
+    }
+    
+    .flatpickr-calendar.open {
+      z-index: 9999 !important;
+      display: block !important;
+    }
+    
+    .flatpickr-calendar.arrowTop {
+      margin-top: -4px;
+    }
+    
+    .flatpickr-calendar.arrowBottom {
+      margin-top: 4px;
+    }
+    
+    .flatpickr-months {
+      border-radius: 8px 8px 0 0;
+    }
+    
+    .flatpickr-current-month {
+      font-size: 16px;
+      font-weight: 600;
+    }
+    
+    .flatpickr-monthDropdown-months {
+      font-weight: 500;
+    }
+    
+    .flatpickr-day.selected,
+    .flatpickr-monthSelect-month.selected {
+      background: var(--vdc-green) !important;
+      border-color: var(--vdc-green) !important;
+      color: white !important;
+    }
+    
+    .flatpickr-day.selected:hover,
+    .flatpickr-monthSelect-month.selected:hover {
+      background: var(--vdc-green-hover) !important;
+      border-color: var(--vdc-green-hover) !important;
+    }
+    
+    .flatpickr-day:hover,
+    .flatpickr-monthSelect-month:hover {
+      background: var(--vdc-grey-10);
+      border-color: var(--vdc-grey-15);
+    }
+    
+    .flatpickr-monthSelect-months {
+      max-height: none !important;
+      overflow: visible !important;
+    }
+    
+    .flatpickr-monthSelect-month {
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    
+    .shortcuts { 
+      font-size: 11px; 
+      color: var(--vdc-grey-60);
+      margin-top: 16px;
+      text-align: center;
+      padding-top: 16px;
+      border-top: 1px solid var(--vdc-grey-10);
+      font-weight: 500;
+      letter-spacing: 0.01em;
+    }
+    
+    .button-hint {
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.75);
+      font-weight: 400;
+      opacity: 0.9;
+    }
+    
+    /* This can share styling with the inactive view */
+    #inactiveView, #wrongServiceView {
+      display: none; /* Hidden by default */
+      text-align: center;
+      padding: 30px 10px;
+    }
+    
+    #inactiveView p, #wrongServiceView p {
+      margin: 0 0 20px 0;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="activeView">
+    <h3>VDC Data Exporter</h3>
+    
+    <div id="filters">
+      <label id="tenantsSummaryLabel" style="display: none; margin-bottom: 12px;">
+        <input type="checkbox" id="tenantsSummaryOnly">
+        <span>Export tenants summary only</span>
+      </label>
+      
+      <label>
+        <input type="checkbox" id="filterByDate">
+        <span>Filter by date range</span>
+      </label>
+      <div id="dateInputs">
+        <label>
+          From:
+          <input type="text" id="dateFrom" placeholder="Select month" readonly>
+        </label>
+        <label>
+          To:
+          <input type="text" id="dateTo" placeholder="Select month" readonly>
+        </label>
+      </div>
+    </div>
+    
+    <button id="exportButton">Export to CSV <span class="button-hint">(Enter)</span></button>
+    
+    <p id="status"></p>
+    
+    <div class="shortcuts">
+      Shortcuts: Enter = Export, Esc = Close
+    </div>
+  </div>
+
+  <div id="inactiveView">
+    <p>Sorry, this extension is designed for use with Veeam Data Cloud Vault only. Please go to the portal to use it.</p>
+    <button id="goToPortalButton">Go to VDC Portal</button>
+  </div>
+  
+  <div id="wrongServiceView">
+    <p>This extension currently only supports Veeam Data Cloud <strong>Vault</strong>. To proceed, please navigate to the Vault section of the portal. Support for other VDC services may be added in the future.</p>
+  </div>
+
+  <script src="flatpickr.min.js"></script>
+  <script src="flatpickr-monthSelect.js"></script>
+  <script src="popup.js" defer></script>
+</body>
+</html>
