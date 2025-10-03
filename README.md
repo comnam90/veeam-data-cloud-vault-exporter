@@ -39,11 +39,17 @@ This is an unofficial, community-driven project. It is **not** an official Veeam
 
 This extension is not on the Chrome Web Store and must be loaded manually as an "unpacked extension."
 
-1. **Download Files:** Make sure you have the project files (`manifest.json`, `popup.html`, `popup.js`, and `icon.png`) in a single folder on your computer.
-2. **Open Chrome Extensions:** Open Google Chrome and navigate to the extensions page by typing `chrome://extensions` in the address bar.
-3. **Enable Developer Mode:** In the top-right corner of the extensions page, toggle the **Developer mode** switch on.
-4. **Load the Extension:** Click the **Load unpacked** button that appears on the top-left.
-5. **Select Folder:** In the file dialog, navigate to and select the folder where you saved the project files.
+### Download the Extension
+
+1. **Download the Latest Release:** Go to the [Releases page](https://github.com/comnam90/veeam-data-cloud-vault-exporter/releases/latest) and download the `Source code (zip)` file (e.g., `veeam-data-cloud-vault-exporter-1.0.0.zip`)
+2. **Extract the ZIP:** Extract the downloaded ZIP file to a folder on your computer. Remember this location as you'll need it in the next steps.
+
+### Load into Chrome
+
+3. **Open Chrome Extensions:** Open Google Chrome and navigate to the extensions page by typing `chrome://extensions` in the address bar.
+4. **Enable Developer Mode:** In the top-right corner of the extensions page, toggle the **Developer mode** switch on.
+5. **Load the Extension:** Click the **Load unpacked** button that appears on the top-left.
+6. **Select Folder:** In the file dialog, navigate to and select the folder where you extracted the release files (the folder should contain `manifest.json`, `popup.html`, `popup.js`, and other extension files).
 
 The "VDC Vault Data Exporter" extension should now appear in your list of extensions.
 
