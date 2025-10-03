@@ -2,7 +2,7 @@
 
 A simple Chrome extension to export detailed usage and configuration data from the **Veeam Data Cloud Vault** service to a single CSV file.
 
-> **Note:** This extension is specifically designed for the **Vault** service within Veeam Data Cloud. It does not support other VDC services such as Backup or Orchestration.
+> **Note:** This extension is specifically designed for the **Vault** service within Veeam Data Cloud. It does not support other VDC services such as M365 or Entra ID.
 
 ## ⚠️ Disclaimer
 
