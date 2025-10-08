@@ -10,6 +10,10 @@ This is an unofficial, community-driven project. It is **not** an official Veeam
 
 **Please do not contact Veeam Support for any issues with this extension.** All questions, bugs, and feedback should be reported via the **Issues** tab on this GitHub repository. Use of this tool is entirely at your own risk.
 
+---
+
+Veeam® is a registered trademark of Veeam Software. This project is an independent community tool and is not affiliated with, sponsored by, or endorsed by Veeam Software.
+
 ## Features
 
 ### Core Export Capabilities
