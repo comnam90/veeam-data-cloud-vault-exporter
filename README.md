@@ -191,3 +191,7 @@ It was also made possible thanks to the following open-source project:
 ## License
 
 This project is licensed under the MIT License.
+
+---
+
+Veeam® is a registered trademark of Veeam Software. This project is an independent community tool and is not affiliated with, sponsored by, or endorsed by Veeam Software.
