@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.1] - 2025-11-03
+
+### Fixed
+- Fixed summary mode detection on production environment after Veeam updated `cloud.veeam.com` URL structure to match staging
+- Unified URL detection logic - both production and staging now use `/vault/manage` endpoint
+- Extension now correctly detects tenants management page on production
+
+### Changed
+- Simplified URL pattern matching by removing environment-specific checks (production and staging now use identical URL patterns)
+
 ## [1.1.0] - 2025-10-09
 
 ### Added
