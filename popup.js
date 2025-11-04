@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`Single tenant mode activated for ID: ${activeTenantId}`);
           
           // Check if on the tenants management page (unified URL for both environments)
-          } else if (tab.url.endsWith('/vault/manage')) {
+          } else if (pathname === '/vault/manage' || pathname === '/vault/manage/') {
             // If on the main tenants page, show the summary-only option
             document.getElementById('tenantsSummaryLabel').style.display = 'flex';
             console.log('Tenants summary mode available.');
