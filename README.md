@@ -81,7 +81,7 @@ The "VDC Vault Data Exporter" extension should now appear in your list of extens
 
 #### Single Vault Tenant Export
 
-- **When:** Navigate to a specific Vault tenant's detail page (URL contains `/vault/tenant/{tenant-id}`)
+- **When:** Navigate to a specific Vault tenant's detail page (URL contains `/vault/app/tenant/{tenant-id}`)
 - **What:** Exports only that Vault tenant's data
 - **Time:** Very fast (a few seconds)
 - **Filename:** `veeam_data_cloud_vault_export_{TenantName}_YYYY-MM-DD.csv`
