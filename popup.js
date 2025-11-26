@@ -197,9 +197,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const toMonth = String(now.getMonth() + 1).padStart(2, '0');
       const toDateStr = `${toYear}-${toMonth}`;
 
-      // Calculate 6 months ago (From Date)
+      // Calculate start of 6 month window (From Date)
       const past = new Date();
-      past.setMonth(now.getMonth() - 6);
+      past.setMonth(now.getMonth() - 5);
       const fromYear = past.getFullYear();
       const fromMonth = String(past.getMonth() + 1).padStart(2, '0');
       const fromDateStr = `${fromYear}-${fromMonth}`;
