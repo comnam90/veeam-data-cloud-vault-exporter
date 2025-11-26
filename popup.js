@@ -191,16 +191,24 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.target.checked) {
       dateInputsDiv.style.display = 'block';
 
-      // Get the current date
+      // Get the current date (To Date)
       const now = new Date();
-      const year = now.getFullYear();
-      // getMonth() is 0-indexed (0=Jan), so we add 1
-      const month = String(now.getMonth() + 1).padStart(2, '0'); 
-      const currentMonth = `${year}-${month}`;
+      const toYear = now.getFullYear();
+      const toMonth = String(now.getMonth() + 1).padStart(2, '0');
+      const toDateStr = `${toYear}-${toMonth}`;
+
+      // Calculate start of 6 month window (From Date)
+      const past = new Date();
+      past.setMonth(now.getMonth() - 5);
+      const fromYear = past.getFullYear();
+      const fromMonth = String(past.getMonth() + 1).padStart(2, '0');
+      const fromDateStr = `${fromYear}-${fromMonth}`;
 
       // Set the date on both flatpickr instances
-      dateFromPicker.setDate(currentMonth, true); // true triggers the onChange event
-      dateToPicker.setDate(currentMonth, true);
+      // Set From date first
+      dateFromPicker.setDate(fromDateStr, true); 
+      // Set To date second
+      dateToPicker.setDate(toDateStr, true);
 
     } else {
       dateInputsDiv.style.display = 'none';

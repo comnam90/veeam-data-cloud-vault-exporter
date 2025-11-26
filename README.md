@@ -65,7 +65,7 @@ The "VDC Vault Data Exporter" extension should now appear in your list of extens
 2. **Navigate to VDC Vault:** Go to any Veeam Data Cloud **Vault** page (organization dashboard, tenant management, or specific tenant page). **Important:** This extension only works on Vault service pages - if you're on other VDC services, the extension will display a message indicating it's not active on those services.
 3. **Open the Extension:** Click the extension's icon in the Chrome toolbar. You may need to click the puzzle piece icon first to find and "pin" it.
 4. **Configure Export (Optional):**
-   - Check **"Filter by date"** to export only specific months of Vault usage data
+   - Check **"Filter by date"** to export only specific months of Vault usage data (defaults to last 6 months)
    - Check **"Tenants summary only"** for a fast export without detailed vault statistics
 5. **Start Export:** Click the **Export to CSV** or **Export Tenant to CSV** button (text varies based on context).
 6. **Save the File:** The extension will fetch the Vault data (watch the progress indicator). Once complete, a "Save As" dialog will appear with an automatically generated filename like `veeam_data_cloud_vault_export_2025-10-03.csv`.
