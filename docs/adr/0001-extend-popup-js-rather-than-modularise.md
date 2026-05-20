@@ -1,7 +1,7 @@
 # 0001 — Extend `popup.js` rather than split into modules
 
 - **Date:** 2026-05-21
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0006](0006-adopt-vitest-and-es-modules-for-pure-logic.md) (also 2026-05-21)
 - **Context:** Bulk AWS key rotation feature
 
 ## Context
