@@ -1,3 +1,5 @@
+import { escapeCSV } from './lib/csv-utils.js';
+
 // This ensures the script runs after the popup's HTML is loaded
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -348,14 +350,6 @@ document.addEventListener('DOMContentLoaded', () => {
       exportButton.disabled = false;
     }
   });
-
-  // CSV Escape helper function - escapes quotes per RFC 4180
-  function escapeCSV(value) {
-    if (value === null || value === undefined) return '';
-    const stringValue = String(value);
-    // Escape quotes by doubling them
-    return stringValue.replace(/"/g, '""');
-  }
 
   // Helper function to trigger CSV download
   function triggerCsvDownload(csvContent, baseFilename) {
