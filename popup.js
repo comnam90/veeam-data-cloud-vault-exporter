@@ -290,41 +290,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Step 3: Fetch the detailed stats for each tenant in parallel
         statusEl.textContent = `Fetching stats: 0/${filteredWorkloads.length} (0%)`;
-        
-        let completed = 0;
-        const statPromises = filteredWorkloads.map(async (tenant) => {
-          const statsUrl = API_ENDPOINTS.STORAGE_STATS(tenant.id);
-          const response = await fetch(statsUrl);
-          if (!response.ok) throw new Error(`HTTP ${response.status} for tenant "${tenant.displayName}"`);
-          const data = await response.json();
-          
-          // Update progress
-          completed++;
-          const percentage = Math.round((completed / workloadsData.length) * 100);
-          statusEl.textContent = `Fetching stats: ${completed}/${workloadsData.length} (${percentage}%)`;
-          
-          return { tenantName: tenant.displayName, tenantId: tenant.id, statsData: data.storageStatistics };
-        });
-        
-        const results = await Promise.allSettled(statPromises);
-        const allTenantStats = [];
-        const failedTenants = [];
-        
-        results.forEach((result, index) => {
-          if (result.status === 'fulfilled') {
-            allTenantStats.push(result.value);
-          } else {
-            const tenant = filteredWorkloads[index];
-            failedTenants.push(tenant.displayName);
-            console.error(`Failed to fetch data for tenant "${tenant.displayName}":`, result.reason.message);
-            // Include failed tenant with empty stats (will show as N/A in CSV)
-            allTenantStats.push({
-              tenantName: tenant.displayName,
-              tenantId: tenant.id,
-              statsData: []
-            });
+
+        const { allTenantStats, failedTenants } = await fetchAllTenantStats(
+          filteredWorkloads,
+          (completed, total) => {
+            const percentage = Math.round((completed / total) * 100);
+            statusEl.textContent = `Fetching stats: ${completed}/${total} (${percentage}%)`;
           }
-        });
+        );
 
         // Step 4: Call the detailed CSV export function with dynamic filename
         statusEl.textContent = 'Generating CSV...';
@@ -371,6 +344,45 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadLink.click();
     document.body.removeChild(downloadLink);
     setTimeout(() => URL.revokeObjectURL(objUrl), 100);
+  }
+
+  // Fetches storage-stats for each tenant in `tenants` with limited error-tolerance.
+  // Returns { allTenantStats, failedTenants }. Failed tenants are still included in
+  // allTenantStats with statsData: [] so downstream consumers see them as N/A rows.
+  async function fetchAllTenantStats(tenants, onProgress) {
+    let completed = 0;
+    const total = tenants.length;
+
+    const statPromises = tenants.map(async (tenant) => {
+      const statsUrl = API_ENDPOINTS.STORAGE_STATS(tenant.id);
+      const response = await fetch(statsUrl);
+      if (!response.ok) throw new Error(`HTTP ${response.status} for tenant "${tenant.displayName}"`);
+      const data = await response.json();
+      completed++;
+      if (onProgress) onProgress(completed, total);
+      return { tenantName: tenant.displayName, tenantId: tenant.id, statsData: data.storageStatistics };
+    });
+
+    const results = await Promise.allSettled(statPromises);
+    const allTenantStats = [];
+    const failedTenants = [];
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        allTenantStats.push(result.value);
+      } else {
+        const tenant = tenants[index];
+        failedTenants.push(tenant.displayName);
+        console.error(`Failed to fetch data for tenant "${tenant.displayName}":`, result.reason.message);
+        allTenantStats.push({
+          tenantName: tenant.displayName,
+          tenantId: tenant.id,
+          statsData: []
+        });
+      }
+    });
+
+    return { allTenantStats, failedTenants };
   }
 
   // Summary CSV function - creates high-level tenant overview without vault details
