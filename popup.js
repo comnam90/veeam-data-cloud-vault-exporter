@@ -662,7 +662,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await response.json();
       completed++;
       if (onProgress) onProgress(completed, total);
-      return { tenantName: tenant.displayName, tenantId: tenant.id, statsData: data.storageStatistics };
+      return { tenantName: tenant.displayName, tenantId: tenant.id, statsData: data.storageUsageStatistics };
     });
 
     const results = await Promise.allSettled(statPromises);
@@ -822,7 +822,7 @@ document.addEventListener('DOMContentLoaded', () => {
               `"${escapeCSV(storage.displayName)}"`,
               `"${escapeCSV(storage.storageName)}"`,
               `"${escapeCSV(monthlyData.date)}"`,
-              monthlyData.storageUsage
+              monthlyData.valueInTebiBytes
             ].join(',');
             csvContent += row + '\n';
           });
