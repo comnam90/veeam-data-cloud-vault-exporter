@@ -1,5 +1,5 @@
 import { escapeCSV } from './lib/csv-utils.js';
-import { isAwsTenant } from './lib/rotation.js';
+import { isAwsTenant, rotateOne, runRotationPool } from './lib/rotation.js';
 
 // This ensures the script runs after the popup's HTML is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -374,11 +374,67 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  rotateButton.addEventListener('click', () => {
+  rotateButton.addEventListener('click', async () => {
     if (rotationInFlight) return;
-    // In Idle state, button kicks off enumeration. (Preview-state click is wired in Task 8.)
+
+    // Idle / Empty / re-clicked-after-empty: kick off enumeration.
     if (rotateConfirm.hidden) {
       runEnumeration();
+      return;
+    }
+
+    // Preview → Running. Type-to-confirm guard.
+    if (rotatePhrase.value.trim() !== CONFIRM_PHRASE) return;
+
+    rotationInFlight = true;
+    rotateButton.disabled = true;
+
+    rotatePreview.hidden = true;
+    rotateConfirm.hidden = true;
+    rotateProgress.hidden = false;
+    rotateBar.value = 0;
+    rotateBar.max = vaultsToRotate.length;
+    rotateProgressText.textContent = `Rotating 0 / ${vaultsToRotate.length} vaults…`;
+    rotateStatus.textContent = '';
+    rotateStatus.className = '';
+
+    try {
+      const worker = async (vault) => {
+        const url = API_ENDPOINTS.REGENERATE_KEY(vault.storageName, vault.tenantId);
+        return rotateOne(vault, url);
+      };
+      const results = await runRotationPool(vaultsToRotate, worker, {
+        concurrency: 5,
+        onProgress: (done, total) => {
+          rotateBar.value = done;
+          const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+          rotateProgressText.textContent = `Rotating ${done} / ${total} (${pct}%)`;
+        }
+      });
+
+      // TEMP: log results to console; Task 9 replaces this with CSV download.
+      console.log('Rotation results:', results);
+      const successCount = results.filter(r => r.error == null).length;
+      const failureCount = results.length - successCount;
+      rotateStatus.className = failureCount > 0 ? 'warning' : 'success';
+      rotateStatus.textContent = failureCount > 0
+        ? `⚠️ ${successCount} rotated, ${failureCount} failed (CSV not yet implemented; see console).`
+        : `✅ ${successCount} rotated (CSV not yet implemented; see console).`;
+    } catch (err) {
+      console.error('Rotation pool failed:', err);
+      rotateStatus.className = 'error';
+      rotateStatus.textContent = err.message;
+    } finally {
+      rotationInFlight = false;
+      rotateButton.disabled = false;
+      rotatePreview.hidden = true;
+      rotatePreview.innerHTML = '';
+      rotateConfirm.hidden = true;
+      rotatePhrase.value = '';
+      rotateProgress.hidden = true;
+      rotateButton.textContent = 'Preview affected vaults';
+      vaultsToRotate = [];
+      enumerationFailedTenants = [];
     }
   });
 
