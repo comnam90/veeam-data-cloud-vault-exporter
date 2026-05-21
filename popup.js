@@ -201,6 +201,189 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // ----- Rotation state -----
+  let rotationInFlight = false;
+  let vaultsToRotate = [];           // [{ tenantId, tenantName, storageName, vaultName }]
+  let enumerationFailedTenants = []; // names of tenants whose stats fetch failed
+
+  const rotateButton = document.getElementById('rotateButton');
+  const rotatePreview = document.getElementById('rotatePreview');
+  const rotateConfirm = document.getElementById('rotateConfirm');
+  const rotatePhrase = document.getElementById('rotatePhrase');
+  const rotateProgress = document.getElementById('rotateProgress');
+  const rotateBar = document.getElementById('rotateBar');
+  const rotateProgressText = document.getElementById('rotateProgressText');
+  const rotateStatus = document.getElementById('rotateStatus');
+
+  // Minimal HTML escaper for preview rendering.
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function setRotateStateIdle() {
+    rotatePreview.hidden = true;
+    rotatePreview.innerHTML = '';
+    rotateConfirm.hidden = true;
+    rotatePhrase.value = '';
+    rotateProgress.hidden = true;
+    rotateButton.textContent = 'Preview affected vaults';
+    rotateButton.disabled = false;
+    vaultsToRotate = [];
+    enumerationFailedTenants = [];
+  }
+
+  function setRotateStatePreview(tenantsCount, singleTenantName) {
+    rotateStatus.textContent = '';
+    rotateStatus.className = '';
+
+    const total = vaultsToRotate.length;
+    const examples = vaultsToRotate.slice(0, 3).map(v => v.vaultName);
+    const remaining = total - examples.length;
+
+    const headline = singleTenantName
+      ? `<strong>${total.toLocaleString()} AWS vaults</strong> in tenant <em>${escapeHtml(singleTenantName)}</em> will be rotated.`
+      : `<strong>${tenantsCount.toLocaleString()} AWS tenants, ${total.toLocaleString()} AWS vaults</strong> will be rotated.`;
+
+    let html = `<p>${headline}</p>`;
+    if (examples.length > 0) {
+      html += `<p class="preview-examples">Examples: ${examples.map(e => `<code>${escapeHtml(e)}</code>`).join(', ')}</p>`;
+    }
+    if (remaining > 0) {
+      html += `<p class="preview-more">+ ${remaining.toLocaleString()} more vaults</p>`;
+    }
+    if (enumerationFailedTenants.length > 0) {
+      const names = enumerationFailedTenants.map(escapeHtml).join(', ');
+      html += `<p class="preview-warning">⚠️ ${enumerationFailedTenants.length} tenant(s) couldn't be enumerated and will be skipped: ${names}</p>`;
+    }
+
+    rotatePreview.innerHTML = html;
+    rotatePreview.hidden = false;
+    rotateConfirm.hidden = false;
+    rotatePhrase.value = '';
+    rotateProgress.hidden = true;
+    rotateButton.textContent = 'Rotate AWS Keys';
+    rotateButton.disabled = true; // remains disabled until ROTATE is typed (Task 6)
+  }
+
+  function setRotateStateEmpty(message) {
+    rotatePreview.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    rotatePreview.hidden = false;
+    rotateConfirm.hidden = true;
+    rotatePhrase.value = '';
+    rotateProgress.hidden = true;
+    rotateButton.textContent = 'Preview affected vaults';
+    rotateButton.disabled = false;
+  }
+
+  async function runEnumeration() {
+    rotateButton.disabled = true;
+    rotateStatus.textContent = 'Enumerating AWS tenants…';
+    rotateStatus.className = '';
+
+    try {
+      const meResponse = await fetch(API_ENDPOINTS.ME);
+      if (!meResponse.ok) throw new Error('Could not fetch user data. Are you logged in?');
+      const orgId = (await meResponse.json()).organizationId;
+      if (!orgId) throw new Error('Organization ID not found.');
+
+      const [subscriptionsResponse, workloadsResponse] = await Promise.all([
+        fetch(API_ENDPOINTS.SUBSCRIPTIONS(orgId)),
+        fetch(API_ENDPOINTS.WORKLOAD_TENANTS(orgId))
+      ]);
+      if (!subscriptionsResponse.ok) throw new Error('Could not fetch subscriptions.');
+      if (!workloadsResponse.ok) throw new Error('Could not fetch workload tenants.');
+
+      const subscriptionsData = await subscriptionsResponse.json();
+      const workloadsData = await workloadsResponse.json();
+      const subscriptionsMap = new Map(subscriptionsData.subscriptions.subscriptions.map(s => [s.id, s]));
+
+      if (!workloadsData || workloadsData.length === 0) {
+        setRotateStateEmpty('No workload tenants found.');
+        rotateStatus.textContent = '';
+        return;
+      }
+
+      let awsTenants = workloadsData.filter(t => isAwsTenant(t, subscriptionsMap));
+      let singleTenantName = null;
+
+      if (activeTenantId) {
+        const thisTenant = workloadsData.find(t => t.id === activeTenantId);
+        if (!thisTenant) {
+          setRotateStateEmpty(`Tenant ${activeTenantId} not found in this organization.`);
+          rotateStatus.textContent = '';
+          return;
+        }
+        if (!isAwsTenant(thisTenant, subscriptionsMap)) {
+          const edition = subscriptionsMap.get(thisTenant.subscriptionId)?.product?.edition || 'an unknown edition';
+          setRotateStateEmpty(`This tenant uses ${edition} — only AWS vaults can be rotated.`);
+          rotateStatus.textContent = '';
+          return;
+        }
+        awsTenants = [thisTenant];
+        singleTenantName = thisTenant.displayName;
+      }
+
+      if (awsTenants.length === 0) {
+        setRotateStateEmpty('No AWS tenants found in this organization — nothing to rotate.');
+        rotateStatus.textContent = '';
+        return;
+      }
+
+      rotateStatus.textContent = `Enumerating vaults: 0/${awsTenants.length}`;
+      const { allTenantStats, failedTenants } = await fetchAllTenantStats(
+        awsTenants,
+        (done, total) => {
+          rotateStatus.textContent = `Enumerating vaults: ${done}/${total}`;
+        }
+      );
+      enumerationFailedTenants = failedTenants;
+
+      vaultsToRotate = [];
+      allTenantStats.forEach(({ tenantId, tenantName, statsData }) => {
+        if (!statsData || statsData.length === 0) return;
+        statsData.forEach(storage => {
+          vaultsToRotate.push({
+            tenantId,
+            tenantName,
+            storageName: storage.storageName,
+            vaultName: storage.displayName
+          });
+        });
+      });
+
+      if (vaultsToRotate.length === 0) {
+        setRotateStateEmpty(
+          enumerationFailedTenants.length > 0
+            ? `Couldn't enumerate any AWS vaults (${enumerationFailedTenants.length} tenant fetch error(s)).`
+            : 'No AWS vaults found in scope.'
+        );
+        rotateStatus.textContent = '';
+        return;
+      }
+
+      setRotateStatePreview(awsTenants.length, singleTenantName);
+      rotateStatus.textContent = '';
+
+    } catch (err) {
+      console.error('Rotation enumeration failed:', err);
+      rotateStatus.className = 'error';
+      rotateStatus.textContent = err.message;
+      rotateButton.disabled = false;
+    }
+  }
+
+  rotateButton.addEventListener('click', () => {
+    if (rotationInFlight) return;
+    // In Idle state, button kicks off enumeration. (Preview-state click is wired in Task 8.)
+    if (rotateConfirm.hidden) {
+      runEnumeration();
+    }
+  });
+
+  setRotateStateIdle();
+
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
     // Enter key triggers export
