@@ -427,6 +427,9 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             args: [fetchUrl]
           });
+          if (!injection?.result) {
+            throw new Error('chrome.scripting.executeScript returned no result — is the tab still on a Vault page?');
+          }
           const { ok, status, statusText, body } = injection.result;
           return {
             ok,
@@ -793,7 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
       "SubscriptionId", "SubscriptionEdition", "SubscriptionLimitTB", "SubscriptionExpires",
       "TenantOverallUsageTB", "TenantVaultCount", "TenantStorageRegions",
       "VaultDisplayName", "VaultStorageName",
-      "UsageMonth", "UsageTB"
+      "UsageMonth", "UsageTiB"
     ].join(',') + '\n';
 
     // Determine filter status and values once before the loop

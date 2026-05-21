@@ -55,7 +55,7 @@ describe('rotateOne', () => {
       expect(url).toBe(sampleUrl);
       expect(init.method).toBe('POST');
       expect(init.body).toBe('{}');
-      return { ok: true, status: 200, json: async () => body };
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
     };
     const result = await rotateOne(sampleVault, sampleUrl, { fetch: fetchImpl, now: fixedNow });
     expect(result.error).toBe(null);
@@ -97,7 +97,7 @@ describe('rotateOne', () => {
       accessKey: 'AK', secretKey: 'SK',
       storageName: 's1', tenantName: 'Acme', vaultName: 'V', provider: 'AZURE'
     };
-    const fetchImpl = async () => ({ ok: true, status: 200, json: async () => body });
+    const fetchImpl = async () => ({ ok: true, status: 200, text: async () => JSON.stringify(body) });
     const result = await rotateOne(sampleVault, sampleUrl, { fetch: fetchImpl, now: fixedNow });
     expect(result.error).toBe(null);
     expect(result.anomaly).toBe('Expected provider AWS, got AZURE');
@@ -105,9 +105,18 @@ describe('rotateOne', () => {
   });
 
   it('returns Failed when response body is empty (e.g. CSRF rejection)', async () => {
-    const fetchImpl = async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected end of JSON input'); } });
+    const fetchImpl = async () => ({ ok: true, status: 200, text: async () => '' });
     const result = await rotateOne(sampleVault, sampleUrl, { fetch: fetchImpl, now: fixedNow });
     expect(result.error).toBe('API returned empty response body — rotation may not have occurred');
+    expect(result.response).toBe(null);
+    expect(result.anomaly).toBe(null);
+  });
+
+  it('returns Failed with non-JSON body preview when server returns HTML or plain text', async () => {
+    const fetchImpl = async () => ({ ok: true, status: 200, text: async () => '<html>Bad Gateway</html>' });
+    const result = await rotateOne(sampleVault, sampleUrl, { fetch: fetchImpl, now: fixedNow });
+    expect(result.error).toContain('non-JSON response');
+    expect(result.error).toContain('<html>');
     expect(result.response).toBe(null);
     expect(result.anomaly).toBe(null);
   });
