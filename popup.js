@@ -387,6 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (rotatePhrase.value.trim() !== CONFIRM_PHRASE) return;
 
     rotationInFlight = true;
+    tabButtons.forEach(btn => { btn.disabled = true; });
     rotateButton.disabled = true;
 
     rotatePreview.hidden = true;
@@ -443,6 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
       rotateStatus.textContent = err.message;
     } finally {
       rotationInFlight = false;
+      tabButtons.forEach(btn => { btn.disabled = false; });
       rotateButton.disabled = false;
       rotatePreview.hidden = true;
       rotatePreview.innerHTML = '';
@@ -464,6 +466,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   setRotateStateIdle();
+
+  // Best-effort: warn the user if they try to close mid-rotation.
+  // Chrome's extension-popup beforeunload behaviour is inconsistent; treat as
+  // defence-in-depth, not a guarantee. See docs/adr/0004-popup-only-architecture-in-v1.md.
+  window.addEventListener('beforeunload', (e) => {
+    if (rotationInFlight) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
 
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
