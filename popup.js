@@ -1,5 +1,5 @@
 import { escapeCSV } from './lib/csv-utils.js';
-import { isAwsTenant, rotateOne, runRotationPool } from './lib/rotation.js';
+import { isAwsTenant, rotateOne, runRotationPool, formatRotationCsv } from './lib/rotation.js';
 
 // This ensures the script runs after the popup's HTML is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -412,14 +412,31 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // TEMP: log results to console; Task 9 replaces this with CSV download.
-      console.log('Rotation results:', results);
+      // Build base filename (mirrors export naming).
+      let baseFilename = 'veeam_data_cloud_key_rotation';
+      if (activeTenantId) {
+        const sample = results[0]?.vault?.tenantName || 'tenant';
+        const sanitized = sample.replace(/[^a-zA-Z0-9]/g, '_');
+        baseFilename = `veeam_data_cloud_${sanitized}_key_rotation`;
+      }
+
+      const csv = formatRotationCsv(results);
+      triggerCsvDownload(csv, baseFilename);
+
       const successCount = results.filter(r => r.error == null).length;
       const failureCount = results.length - successCount;
-      rotateStatus.className = failureCount > 0 ? 'warning' : 'success';
-      rotateStatus.textContent = failureCount > 0
-        ? `⚠️ ${successCount} rotated, ${failureCount} failed (CSV not yet implemented; see console).`
-        : `✅ ${successCount} rotated (CSV not yet implemented; see console).`;
+      const anomalyCount = results.filter(r => r.anomaly != null).length;
+
+      if (failureCount === 0 && anomalyCount === 0) {
+        rotateStatus.className = 'success';
+        rotateStatus.textContent = `✅ ${successCount} rotated. CSV downloaded.`;
+      } else if (anomalyCount === 0) {
+        rotateStatus.className = 'warning';
+        rotateStatus.textContent = `⚠️ ${successCount} rotated, ${failureCount} failed — see CSV.`;
+      } else {
+        rotateStatus.className = 'warning';
+        rotateStatus.textContent = `⚠️ ${successCount} rotated, ${failureCount} failed, ${anomalyCount} provider anomaly(ies) — see CSV.`;
+      }
     } catch (err) {
       console.error('Rotation pool failed:', err);
       rotateStatus.className = 'error';

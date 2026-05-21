@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { isAwsTenant } from '../lib/rotation.js';
 import { rotateOne } from '../lib/rotation.js';
 import { runRotationPool } from '../lib/rotation.js';
+import { formatRotationCsv } from '../lib/rotation.js';
 
 describe('isAwsTenant', () => {
   it('returns true for an edition string containing AWS', () => {
@@ -159,5 +160,97 @@ describe('runRotationPool', () => {
     };
     await runRotationPool(Array(12).fill(0), worker);
     expect(max).toBeLessThanOrEqual(5);
+  });
+});
+
+const baseVault = {
+  tenantId: 't1',
+  tenantName: 'Acme',
+  storageName: 'vault-storage',
+  vaultName: 'vault-display'
+};
+
+describe('formatRotationCsv', () => {
+  it('emits the header row when results are empty', () => {
+    const csv = formatRotationCsv([]);
+    expect(csv.trim()).toBe(
+      'Timestamp,TenantName,TenantId,VaultName,StorageName,Provider,Status,AccessKey,SecretKey,Error'
+    );
+  });
+
+  it('emits a Success row populated from the API response', () => {
+    const csv = formatRotationCsv([{
+      vault: baseVault,
+      response: {
+        accessKey: 'AK', secretKey: 'SK',
+        storageName: 'vault-storage', tenantName: 'Acme', vaultName: 'vault-display',
+        provider: 'AWS'
+      },
+      error: null,
+      anomaly: null,
+      timestamp: '2026-05-21T00:00:00.000Z'
+    }]);
+    const dataRow = csv.split('\n')[1];
+    expect(dataRow).toBe(
+      '"2026-05-21T00:00:00.000Z","Acme","t1","vault-display","vault-storage","AWS","Success","AK","SK",""'
+    );
+  });
+
+  it('emits a Failed row with empty keys and Error populated', () => {
+    const csv = formatRotationCsv([{
+      vault: baseVault,
+      response: null,
+      error: 'HTTP 500: boom',
+      anomaly: null,
+      timestamp: '2026-05-21T00:00:00.000Z'
+    }]);
+    const dataRow = csv.split('\n')[1];
+    expect(dataRow).toBe(
+      '"2026-05-21T00:00:00.000Z","Acme","t1","vault-display","vault-storage","AWS","Failed","","","HTTP 500: boom"'
+    );
+  });
+
+  it('combines API error and provider anomaly in the Error column', () => {
+    const csv = formatRotationCsv([{
+      vault: baseVault,
+      response: {
+        accessKey: 'AK', secretKey: 'SK',
+        storageName: 'vault-storage', tenantName: 'Acme', vaultName: 'vault-display',
+        provider: 'AZURE'
+      },
+      error: null,
+      anomaly: 'Expected provider AWS, got AZURE',
+      timestamp: '2026-05-21T00:00:00.000Z'
+    }]);
+    const dataRow = csv.split('\n')[1];
+    expect(dataRow).toContain('"Expected provider AWS, got AZURE"');
+    expect(dataRow).toContain('"AZURE"');
+    expect(dataRow).toContain('"Success"');
+  });
+
+  it('falls back to enumeration fields when response is null', () => {
+    const csv = formatRotationCsv([{
+      vault: { tenantId: 't1', tenantName: 'Acme', storageName: 'fallback-storage', vaultName: 'fallback-vault' },
+      response: null,
+      error: 'HTTP 500: x',
+      anomaly: null,
+      timestamp: '2026-05-21T00:00:00.000Z'
+    }]);
+    const dataRow = csv.split('\n')[1];
+    expect(dataRow).toContain('"fallback-storage"');
+    expect(dataRow).toContain('"fallback-vault"');
+    expect(dataRow).toContain('"AWS"');
+  });
+
+  it('escapes embedded double-quotes in tenant/vault names', () => {
+    const csv = formatRotationCsv([{
+      vault: { tenantId: 't1', tenantName: 'Acme "Inc"', storageName: 'storage', vaultName: 'v' },
+      response: null,
+      error: 'fail',
+      anomaly: null,
+      timestamp: '2026-05-21T00:00:00.000Z'
+    }]);
+    const dataRow = csv.split('\n')[1];
+    expect(dataRow).toContain('"Acme ""Inc"""');
   });
 });
