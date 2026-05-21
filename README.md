@@ -39,6 +39,17 @@ Veeam® is a registered trademark of Veeam Software. This project is an independ
 - **Error Resilience:** Failed tenant fetches are logged but don't stop the export
 - **Keyboard Shortcuts:** Press Enter to export, Escape to close popup
 
+### Bulk AWS vault key rotation
+
+The Rotate tab lets you regenerate keys in bulk for AWS vaults:
+
+- **All tenants:** Open the popup on `/vault/manage`. The Rotate tab will rotate every AWS vault across every tenant in the organisation.
+- **Single tenant:** Open the popup on `/vault/tenant/<id>`. The Rotate tab is scoped to that tenant's AWS vaults.
+
+A preview shows how many tenants and vaults will be affected, with up to three example vault names. You must type `ROTATE` to enable the final action. The downloaded CSV contains the new `AccessKey` and `SecretKey` for every successful rotation, plus rows for any failures with their error message.
+
+> ⚠️ **Rotating a key invalidates the previous one immediately.** Any tools using the old key will stop working. The downloaded CSV contains live credentials — store securely and delete after use.
+
 ## Installation
 
 This extension is not on the Chrome Web Store and must be loaded manually as an "unpacked extension."
@@ -161,6 +172,10 @@ This provides a quick overview of Vault tenants without the detailed monthly vau
 This extension works with Veeam Data Cloud when accessing **Vault service** pages at `https://cloud.veeam.com/vault/*`.
 
 **Remember:** The extension will not activate on other VDC service pages (M365, Entra ID, etc.) as it is specifically designed for the Vault service only.
+
+## Development
+
+Run unit tests for pure logic with `npm install && npm test` (requires Node 20+). The extension itself still ships unbundled.
 
 ## Troubleshooting
 
