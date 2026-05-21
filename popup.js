@@ -1,3 +1,6 @@
+import { escapeCSV } from './lib/csv-utils.js';
+import { isAwsTenant, rotateOne, runRotationPool, formatRotationCsv } from './lib/rotation.js';
+
 // This ensures the script runs after the popup's HTML is loaded
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -16,12 +19,18 @@ document.addEventListener('DOMContentLoaded', () => {
       ME: `${baseUrl}/me`,
       SUBSCRIPTIONS: (orgId) => `${baseUrl}/subscriptions-svc/organizations/${orgId}/subscriptions`,
       WORKLOAD_TENANTS: (orgId) => `${baseUrl}/workload-tenants-svc/organizations/${orgId}/workload-tenants?workloadType=VAULT`,
-      STORAGE_STATS: (tenantId) => `${baseUrl}/vault/api/cust-StorageAccount/collectionStorageUsedStatistics?wl_tenant_id=${tenantId}`
+      STORAGE_STATS: (tenantId) => `${baseUrl}/vault/api/cust-StorageAccount/collectionStorageUsedStatistics?wl_tenant_id=${tenantId}`,
+      REGENERATE_KEY: (storageName, tenantId) =>
+        `${baseUrl}/vault/api/cust-StorageAccount/regenerateKey` +
+        `?storageName=${encodeURIComponent(storageName)}` +
+        `&wl_tenant_id=${encodeURIComponent(tenantId)}`
     };
   };
 
   // Context-aware state: holds tenant ID if we're in single-tenant mode
   let activeTenantId = null;
+  // Tab ID for chrome.scripting.executeScript (needed so rotation POSTs appear same-origin)
+  let activeTabId = null;
 
   // Cache frequently used elements
   const exportButton = document.getElementById('exportButton');
@@ -45,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Get URL components
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      activeTabId = tab.id;
       const { hostname, pathname } = new URL(tab.url);
 
       const isValidDomain = hostname.includes('cloud.veeam.com') || hostname.includes('stage.cloud.veeam.com');
@@ -173,10 +183,340 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auto-focus on export button for keyboard accessibility
   exportButton.focus();
 
+  // Tab switcher
+  const tabButtons = document.querySelectorAll('.tab');
+  const exportTab = document.getElementById('exportTab');
+  const rotateTab = document.getElementById('rotateTab');
+
+  function switchTab(name) {
+    tabButtons.forEach(btn => {
+      const isActive = btn.dataset.tab === name;
+      btn.classList.toggle('tab-active', isActive);
+    });
+    exportTab.hidden = name !== 'export';
+    rotateTab.hidden = name !== 'rotate';
+  }
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      switchTab(btn.dataset.tab);
+    });
+  });
+
+  // ----- Rotation state -----
+  let rotationInFlight = false;
+  let vaultsToRotate = [];           // [{ tenantId, tenantName, storageName, vaultName }]
+  let enumerationFailedTenants = []; // names of tenants whose stats fetch failed
+
+  const rotateButton = document.getElementById('rotateButton');
+  const rotatePreview = document.getElementById('rotatePreview');
+  const rotateConfirm = document.getElementById('rotateConfirm');
+  const rotatePhrase = document.getElementById('rotatePhrase');
+  const rotateProgress = document.getElementById('rotateProgress');
+  const rotateBar = document.getElementById('rotateBar');
+  const rotateProgressText = document.getElementById('rotateProgressText');
+  const rotateStatus = document.getElementById('rotateStatus');
+  const CONFIRM_PHRASE = 'ROTATE';
+
+  // Minimal HTML escaper for preview rendering.
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function setRotateStateIdle() {
+    rotatePreview.hidden = true;
+    rotatePreview.innerHTML = '';
+    rotateConfirm.hidden = true;
+    rotatePhrase.value = '';
+    rotateProgress.hidden = true;
+    rotateButton.textContent = 'Preview affected vaults';
+    rotateButton.disabled = false;
+    vaultsToRotate = [];
+    enumerationFailedTenants = [];
+  }
+
+  function setRotateStatePreview(tenantsCount, singleTenantName) {
+    rotateStatus.textContent = '';
+    rotateStatus.className = '';
+
+    const total = vaultsToRotate.length;
+    const examples = vaultsToRotate.slice(0, 3).map(v => v.vaultName);
+    const remaining = total - examples.length;
+
+    const headline = singleTenantName
+      ? `<strong>${total.toLocaleString()} AWS vaults</strong> in tenant <em>${escapeHtml(singleTenantName)}</em> will be rotated.`
+      : `<strong>${tenantsCount.toLocaleString()} AWS tenants, ${total.toLocaleString()} AWS vaults</strong> will be rotated.`;
+
+    let html = `<p>${headline}</p>`;
+    if (examples.length > 0) {
+      html += `<p class="preview-examples">Examples: ${examples.map(e => `<code>${escapeHtml(e)}</code>`).join(', ')}</p>`;
+    }
+    if (remaining > 0) {
+      html += `<p class="preview-more">+ ${remaining.toLocaleString()} more vaults</p>`;
+    }
+    if (enumerationFailedTenants.length > 0) {
+      const names = enumerationFailedTenants.map(escapeHtml).join(', ');
+      html += `<p class="preview-warning">⚠️ ${enumerationFailedTenants.length} tenant(s) couldn't be enumerated and will be skipped: ${names}</p>`;
+    }
+
+    rotatePreview.innerHTML = html;
+    rotatePreview.hidden = false;
+    rotateConfirm.hidden = false;
+    rotatePhrase.value = '';
+    rotateProgress.hidden = true;
+    rotateButton.textContent = 'Rotate AWS Keys';
+    rotateButton.disabled = true; // remains disabled until ROTATE is typed (Task 6)
+  }
+
+  function setRotateStateEmpty(message) {
+    rotatePreview.innerHTML = `<p>${escapeHtml(message)}</p>`;
+    rotatePreview.hidden = false;
+    rotateConfirm.hidden = true;
+    rotatePhrase.value = '';
+    rotateProgress.hidden = true;
+    rotateButton.textContent = 'Preview affected vaults';
+    rotateButton.disabled = false;
+  }
+
+  async function runEnumeration() {
+    rotateButton.disabled = true;
+    rotateStatus.textContent = 'Enumerating AWS tenants…';
+    rotateStatus.className = '';
+
+    try {
+      const meResponse = await fetch(API_ENDPOINTS.ME);
+      if (!meResponse.ok) throw new Error('Could not fetch user data. Are you logged in?');
+      const orgId = (await meResponse.json()).organizationId;
+      if (!orgId) throw new Error('Organization ID not found.');
+
+      const [subscriptionsResponse, workloadsResponse] = await Promise.all([
+        fetch(API_ENDPOINTS.SUBSCRIPTIONS(orgId)),
+        fetch(API_ENDPOINTS.WORKLOAD_TENANTS(orgId))
+      ]);
+      if (!subscriptionsResponse.ok) throw new Error('Could not fetch subscriptions.');
+      if (!workloadsResponse.ok) throw new Error('Could not fetch workload tenants.');
+
+      const subscriptionsData = await subscriptionsResponse.json();
+      const workloadsData = await workloadsResponse.json();
+      const subscriptionsMap = new Map(subscriptionsData.subscriptions.subscriptions.map(s => [s.id, s]));
+
+      if (!workloadsData || workloadsData.length === 0) {
+        setRotateStateEmpty('No workload tenants found.');
+        rotateStatus.textContent = '';
+        return;
+      }
+
+      let awsTenants = workloadsData.filter(t => isAwsTenant(t, subscriptionsMap));
+      let singleTenantName = null;
+
+      if (activeTenantId) {
+        const thisTenant = workloadsData.find(t => t.id === activeTenantId);
+        if (!thisTenant) {
+          setRotateStateEmpty(`Tenant ${activeTenantId} not found in this organization.`);
+          rotateStatus.textContent = '';
+          return;
+        }
+        if (!isAwsTenant(thisTenant, subscriptionsMap)) {
+          const edition = subscriptionsMap.get(thisTenant.subscriptionId)?.product?.edition || 'an unknown edition';
+          setRotateStateEmpty(`This tenant uses ${edition} — only AWS vaults can be rotated.`);
+          rotateStatus.textContent = '';
+          return;
+        }
+        awsTenants = [thisTenant];
+        singleTenantName = thisTenant.displayName;
+      }
+
+      if (awsTenants.length === 0) {
+        setRotateStateEmpty('No AWS tenants found in this organization — nothing to rotate.');
+        rotateStatus.textContent = '';
+        return;
+      }
+
+      rotateStatus.textContent = `Fetching tenant stats: 0/${awsTenants.length}`;
+      const { allTenantStats, failedTenants } = await fetchAllTenantStats(
+        awsTenants,
+        (done, total) => {
+          rotateStatus.textContent = `Fetching tenant stats: ${done}/${total}`;
+        }
+      );
+      enumerationFailedTenants = failedTenants;
+
+      vaultsToRotate = [];
+      allTenantStats.forEach(({ tenantId, tenantName, statsData }) => {
+        if (!statsData || statsData.length === 0) return;
+        statsData.forEach(storage => {
+          vaultsToRotate.push({
+            tenantId,
+            tenantName,
+            storageName: storage.storageName,
+            vaultName: storage.displayName
+          });
+        });
+      });
+
+      if (vaultsToRotate.length === 0) {
+        setRotateStateEmpty(
+          enumerationFailedTenants.length > 0
+            ? `Couldn't enumerate any AWS vaults (${enumerationFailedTenants.length} tenant fetch error(s)).`
+            : 'No AWS vaults found in scope.'
+        );
+        rotateStatus.textContent = '';
+        return;
+      }
+
+      const rotatingTenantCount = new Set(vaultsToRotate.map(v => v.tenantId)).size;
+      setRotateStatePreview(rotatingTenantCount, singleTenantName);
+      rotateStatus.textContent = '';
+
+    } catch (err) {
+      console.error('Rotation enumeration failed:', err);
+      rotateStatus.className = 'error';
+      rotateStatus.textContent = err.message;
+      rotateButton.disabled = false;
+    }
+  }
+
+  rotateButton.addEventListener('click', async () => {
+    if (rotationInFlight) return;
+
+    // Idle / Empty / re-clicked-after-empty: kick off enumeration.
+    if (rotateConfirm.hidden) {
+      runEnumeration();
+      return;
+    }
+
+    // Preview → Running. Type-to-confirm guard.
+    if (rotatePhrase.value.trim() !== CONFIRM_PHRASE) return;
+
+    rotationInFlight = true;
+    tabButtons.forEach(btn => { btn.disabled = true; });
+    rotateButton.disabled = true;
+
+    rotatePreview.hidden = true;
+    rotateConfirm.hidden = true;
+    rotateProgress.hidden = false;
+    rotateBar.value = 0;
+    rotateBar.max = vaultsToRotate.length;
+    rotateProgressText.textContent = `Rotating 0 / ${vaultsToRotate.length} vaults…`;
+    rotateStatus.textContent = '';
+    rotateStatus.className = '';
+
+    try {
+      // Use chrome.scripting.executeScript to inject the POST into the page context.
+      // This ensures sec-fetch-site: same-origin, which the API requires for CSRF
+      // protection. A direct fetch from the extension popup has sec-fetch-site: cross-site
+      // and receives a silent 200 empty-body rejection.
+      const tabId = activeTabId;
+      const worker = async (vault) => {
+        const url = API_ENDPOINTS.REGENERATE_KEY(vault.storageName, vault.tenantId);
+        const injectedFetch = async (fetchUrl) => {
+          const [injection] = await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'MAIN',
+            func: async (u) => {
+              const r = await fetch(u, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: '{}'
+              });
+              const body = await r.text();
+              return { ok: r.ok, status: r.status, statusText: r.statusText, body };
+            },
+            args: [fetchUrl]
+          });
+          if (!injection?.result) {
+            throw new Error('chrome.scripting.executeScript returned no result — is the tab still on a Vault page?');
+          }
+          const { ok, status, statusText, body } = injection.result;
+          return {
+            ok,
+            status,
+            statusText,
+            json: async () => JSON.parse(body),
+            text: async () => body
+          };
+        };
+        return rotateOne(vault, url, { fetch: injectedFetch });
+      };
+      const results = await runRotationPool(vaultsToRotate, worker, {
+        concurrency: 5,
+        onProgress: (done, total) => {
+          rotateBar.value = done;
+          const pct = total === 0 ? 0 : Math.round((done / total) * 100);
+          rotateProgressText.textContent = `Rotating ${done} / ${total} (${pct}%)`;
+        }
+      });
+
+      // Build base filename (mirrors export naming).
+      let baseFilename = 'veeam_data_cloud_key_rotation';
+      if (activeTenantId) {
+        const sample = results[0]?.vault?.tenantName || 'tenant';
+        const sanitized = sample.replace(/[^a-zA-Z0-9]/g, '_');
+        baseFilename = `veeam_data_cloud_${sanitized}_key_rotation`;
+      }
+
+      const csv = formatRotationCsv(results);
+      triggerCsvDownload(csv, baseFilename);
+
+      const successCount = results.filter(r => r.error == null).length;
+      const failureCount = results.length - successCount;
+      const anomalyCount = results.filter(r => r.anomaly != null).length;
+
+      if (failureCount === 0 && anomalyCount === 0) {
+        rotateStatus.className = 'success';
+        rotateStatus.textContent = `✅ ${successCount} rotated. CSV downloaded.`;
+      } else if (anomalyCount === 0) {
+        rotateStatus.className = 'warning';
+        rotateStatus.textContent = `⚠️ ${successCount} rotated, ${failureCount} failed — see CSV.`;
+      } else {
+        rotateStatus.className = 'warning';
+        rotateStatus.textContent = `⚠️ ${successCount} rotated, ${failureCount} failed, ${anomalyCount} provider anomaly(ies) — see CSV.`;
+      }
+    } catch (err) {
+      console.error('Rotation pool failed:', err);
+      rotateStatus.className = 'error';
+      rotateStatus.textContent = err.message;
+    } finally {
+      rotationInFlight = false;
+      tabButtons.forEach(btn => { btn.disabled = false; });
+      rotateButton.disabled = false;
+      rotatePreview.hidden = true;
+      rotatePreview.innerHTML = '';
+      rotateConfirm.hidden = true;
+      rotatePhrase.value = '';
+      rotateProgress.hidden = true;
+      rotateButton.textContent = 'Preview affected vaults';
+      vaultsToRotate = [];
+      enumerationFailedTenants = [];
+    }
+  });
+
+  // Type-to-confirm: enable the rotate button only when the phrase matches exactly.
+  // See docs/adr/0005-type-to-confirm-fixed-phrase.md.
+  rotatePhrase.addEventListener('input', () => {
+    if (rotateConfirm.hidden) return;
+    rotateButton.disabled = rotatePhrase.value.trim() !== CONFIRM_PHRASE;
+  });
+
+  setRotateStateIdle();
+
+  // Best-effort: warn the user if they try to close mid-rotation.
+  // Chrome's extension-popup beforeunload behaviour is inconsistent; treat as
+  // defence-in-depth, not a guarantee. See docs/adr/0004-popup-only-architecture-in-v1.md.
+  window.addEventListener('beforeunload', (e) => {
+    if (rotationInFlight) {
+      e.preventDefault();
+      e.returnValue = '';
+    }
+  });
+
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
     // Enter key triggers export
-    if (e.key === 'Enter' && !exportButton.disabled) {
+    if (e.key === 'Enter' && !exportButton.disabled && exportTab.hidden === false) {
       exportButton.click();
     }
     
@@ -288,41 +628,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Step 3: Fetch the detailed stats for each tenant in parallel
         statusEl.textContent = `Fetching stats: 0/${filteredWorkloads.length} (0%)`;
-        
-        let completed = 0;
-        const statPromises = filteredWorkloads.map(async (tenant) => {
-          const statsUrl = API_ENDPOINTS.STORAGE_STATS(tenant.id);
-          const response = await fetch(statsUrl);
-          if (!response.ok) throw new Error(`HTTP ${response.status} for tenant "${tenant.displayName}"`);
-          const data = await response.json();
-          
-          // Update progress
-          completed++;
-          const percentage = Math.round((completed / workloadsData.length) * 100);
-          statusEl.textContent = `Fetching stats: ${completed}/${workloadsData.length} (${percentage}%)`;
-          
-          return { tenantName: tenant.displayName, tenantId: tenant.id, statsData: data.storageStatistics };
-        });
-        
-        const results = await Promise.allSettled(statPromises);
-        const allTenantStats = [];
-        const failedTenants = [];
-        
-        results.forEach((result, index) => {
-          if (result.status === 'fulfilled') {
-            allTenantStats.push(result.value);
-          } else {
-            const tenant = filteredWorkloads[index];
-            failedTenants.push(tenant.displayName);
-            console.error(`Failed to fetch data for tenant "${tenant.displayName}":`, result.reason.message);
-            // Include failed tenant with empty stats (will show as N/A in CSV)
-            allTenantStats.push({
-              tenantName: tenant.displayName,
-              tenantId: tenant.id,
-              statsData: []
-            });
+
+        const { allTenantStats, failedTenants } = await fetchAllTenantStats(
+          filteredWorkloads,
+          (completed, total) => {
+            const percentage = Math.round((completed / total) * 100);
+            statusEl.textContent = `Fetching stats: ${completed}/${total} (${percentage}%)`;
           }
-        });
+        );
 
         // Step 4: Call the detailed CSV export function with dynamic filename
         statusEl.textContent = 'Generating CSV...';
@@ -349,14 +662,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // CSV Escape helper function - escapes quotes per RFC 4180
-  function escapeCSV(value) {
-    if (value === null || value === undefined) return '';
-    const stringValue = String(value);
-    // Escape quotes by doubling them
-    return stringValue.replace(/"/g, '""');
-  }
-
   // Helper function to trigger CSV download
   function triggerCsvDownload(csvContent, baseFilename) {
     // Build the date string from local timezone components
@@ -377,6 +682,48 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadLink.click();
     document.body.removeChild(downloadLink);
     setTimeout(() => URL.revokeObjectURL(objUrl), 100);
+  }
+
+  // Fetches storage-stats for each tenant in `tenants` with limited error-tolerance.
+  // Returns { allTenantStats, failedTenants }. Failed tenants are still included in
+  // allTenantStats with statsData: [] so downstream consumers see them as N/A rows.
+  async function fetchAllTenantStats(tenants, onProgress) {
+    let completed = 0;
+    const total = tenants.length;
+
+    const statPromises = tenants.map(async (tenant) => {
+      try {
+        const statsUrl = API_ENDPOINTS.STORAGE_STATS(tenant.id);
+        const response = await fetch(statsUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status} for tenant "${tenant.displayName}"`);
+        const data = await response.json();
+        return { tenantName: tenant.displayName, tenantId: tenant.id, statsData: data.storageUsageStatistics };
+      } finally {
+        completed++;
+        if (onProgress) onProgress(completed, total);
+      }
+    });
+
+    const results = await Promise.allSettled(statPromises);
+    const allTenantStats = [];
+    const failedTenants = [];
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        allTenantStats.push(result.value);
+      } else {
+        const tenant = tenants[index];
+        failedTenants.push(tenant.displayName);
+        console.error(`Failed to fetch data for tenant "${tenant.displayName}":`, result.reason.message);
+        allTenantStats.push({
+          tenantName: tenant.displayName,
+          tenantId: tenant.id,
+          statsData: []
+        });
+      }
+    });
+
+    return { allTenantStats, failedTenants };
   }
 
   // Summary CSV function - creates high-level tenant overview without vault details
@@ -449,7 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
       "SubscriptionId", "SubscriptionEdition", "SubscriptionLimitTB", "SubscriptionExpires",
       "TenantOverallUsageTB", "TenantVaultCount", "TenantStorageRegions",
       "VaultDisplayName", "VaultStorageName",
-      "UsageMonth", "UsageTB"
+      "UsageMonth", "UsageTiB"
     ].join(',') + '\n';
 
     // Determine filter status and values once before the loop
@@ -514,7 +861,7 @@ document.addEventListener('DOMContentLoaded', () => {
               `"${escapeCSV(storage.displayName)}"`,
               `"${escapeCSV(storage.storageName)}"`,
               `"${escapeCSV(monthlyData.date)}"`,
-              monthlyData.storageUsage
+              monthlyData.valueInTebiBytes
             ].join(',');
             csvContent += row + '\n';
           });
