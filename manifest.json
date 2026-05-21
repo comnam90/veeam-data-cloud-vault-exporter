@@ -12,7 +12,8 @@
   },
   "permissions": [
     "downloads",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
     "https://cloud.veeam.com/*",

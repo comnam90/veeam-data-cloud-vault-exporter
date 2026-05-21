@@ -29,6 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Context-aware state: holds tenant ID if we're in single-tenant mode
   let activeTenantId = null;
+  // Tab ID for chrome.scripting.executeScript (needed so rotation POSTs appear same-origin)
+  let activeTabId = null;
 
   // Cache frequently used elements
   const exportButton = document.getElementById('exportButton');
@@ -52,6 +54,7 @@ document.addEventListener('DOMContentLoaded', () => {
       
       // Get URL components
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      activeTabId = tab.id;
       const { hostname, pathname } = new URL(tab.url);
 
       const isValidDomain = hostname.includes('cloud.veeam.com') || hostname.includes('stage.cloud.veeam.com');
@@ -401,9 +404,38 @@ document.addEventListener('DOMContentLoaded', () => {
     rotateStatus.className = '';
 
     try {
+      // Use chrome.scripting.executeScript to inject the POST into the page context.
+      // This ensures sec-fetch-site: same-origin, which the API requires for CSRF
+      // protection. A direct fetch from the extension popup has sec-fetch-site: cross-site
+      // and receives a silent 200 empty-body rejection.
+      const tabId = activeTabId;
       const worker = async (vault) => {
         const url = API_ENDPOINTS.REGENERATE_KEY(vault.storageName, vault.tenantId);
-        return rotateOne(vault, url);
+        const injectedFetch = async (fetchUrl) => {
+          const [injection] = await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'MAIN',
+            func: async (u) => {
+              const r = await fetch(u, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: '{}'
+              });
+              const body = await r.text();
+              return { ok: r.ok, status: r.status, statusText: r.statusText, body };
+            },
+            args: [fetchUrl]
+          });
+          const { ok, status, statusText, body } = injection.result;
+          return {
+            ok,
+            status,
+            statusText,
+            json: async () => JSON.parse(body),
+            text: async () => body
+          };
+        };
+        return rotateOne(vault, url, { fetch: injectedFetch });
       };
       const results = await runRotationPool(vaultsToRotate, worker, {
         concurrency: 5,
