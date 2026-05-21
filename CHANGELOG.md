@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Defensive `provider !== 'AWS'` anomaly detection captured in the CSV's `Error` column.
 - Vitest test suite covering the new pure logic in `lib/rotation.js` and `lib/csv-utils.js`. Run with `npm test`.
 
+### Fixed
+- Corrected API response field names (`storageUsageStatistics`, `valueInTebiBytes`) that were causing vault details to show N/A and usage values to show 0 in all exports. This also unblocks vault enumeration for the new Rotate feature.
+
 ### Changed
 - Popup layout now uses tabs (`Export`, `Rotate`); export behaviour is unchanged.
 - `popup.js` loads as an ES module. Shared `escapeCSV` helper extracted to `lib/csv-utils.js`.
