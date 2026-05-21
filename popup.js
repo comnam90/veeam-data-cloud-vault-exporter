@@ -1,4 +1,5 @@
 import { escapeCSV } from './lib/csv-utils.js';
+import { isAwsTenant } from './lib/rotation.js';
 
 // This ensures the script runs after the popup's HTML is loaded
 document.addEventListener('DOMContentLoaded', () => {
@@ -18,7 +19,11 @@ document.addEventListener('DOMContentLoaded', () => {
       ME: `${baseUrl}/me`,
       SUBSCRIPTIONS: (orgId) => `${baseUrl}/subscriptions-svc/organizations/${orgId}/subscriptions`,
       WORKLOAD_TENANTS: (orgId) => `${baseUrl}/workload-tenants-svc/organizations/${orgId}/workload-tenants?workloadType=VAULT`,
-      STORAGE_STATS: (tenantId) => `${baseUrl}/vault/api/cust-StorageAccount/collectionStorageUsedStatistics?wl_tenant_id=${tenantId}`
+      STORAGE_STATS: (tenantId) => `${baseUrl}/vault/api/cust-StorageAccount/collectionStorageUsedStatistics?wl_tenant_id=${tenantId}`,
+      REGENERATE_KEY: (storageName, tenantId) =>
+        `${baseUrl}/vault/api/cust-StorageAccount/regenerateKey` +
+        `?storageName=${encodeURIComponent(storageName)}` +
+        `&wl_tenant_id=${encodeURIComponent(tenantId)}`
     };
   };
 
