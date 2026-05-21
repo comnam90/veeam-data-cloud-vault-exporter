@@ -175,7 +175,7 @@ This extension works with Veeam Data Cloud when accessing **Vault service** page
 
 ## Development
 
-Run unit tests for pure logic with `npm install && npm test` (requires Node 20+). The extension itself still ships unbundled.
+Run unit tests for pure logic with `npm install && npm test` (requires Node 20.19+ or 22.12+). The extension itself still ships unbundled.
 
 ## Troubleshooting
 

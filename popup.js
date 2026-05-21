@@ -367,7 +367,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      setRotateStatePreview(awsTenants.length, singleTenantName);
+      const rotatingTenantCount = new Set(vaultsToRotate.map(v => v.tenantId)).size;
+      setRotateStatePreview(rotatingTenantCount, singleTenantName);
       rotateStatus.textContent = '';
 
     } catch (err) {

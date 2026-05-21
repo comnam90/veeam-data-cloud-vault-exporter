@@ -13,7 +13,7 @@ The extension only activates on Vault pages (`/vault/*` under `cloud.veeam.com` 
 **The extension itself has no build step** — Chrome loads the source directly from the repo root. A `package.json` exists solely for Vitest, used to unit-test pure logic in `lib/`. There is no linter.
 
 - **Run locally:** `chrome://extensions` → enable Developer mode → "Load unpacked" → select the repo root. After editing `popup.js` / `popup.html` / `manifest.json` / files under `lib/`, click the reload button on the extension card.
-- **Run tests:** `npm install` once, then `npm test` (Vitest). Requires Node.js 20+. Tests cover only pure logic in `lib/`; UI and state-machine behaviour is verified manually by loading the unpacked extension. See [ADR 0006](docs/adr/0006-adopt-vitest-and-es-modules-for-pure-logic.md).
+- **Run tests:** `npm install` once, then `npm test` (Vitest). Requires Node.js 20.19+ or 22.12+ (Vite engine constraint). Tests cover only pure logic in `lib/`; UI and state-machine behaviour is verified manually by loading the unpacked extension. See [ADR 0006](docs/adr/0006-adopt-vitest-and-es-modules-for-pure-logic.md).
 - **Debug:** Right-click the extension popup → "Inspect" opens DevTools for the popup. `console.log` calls in `popup.js` and `lib/` go there.
 - **Package a release:** Zip the repo contents **excluding** `node_modules/`, `tests/`, `package.json`, `package-lock.json`, and the `docs/` tree (manifest at the top level). The existing `veeam-data-cloud-vault-exporter-vX.Y.Z.zip` at the repo root is the artifact pattern.
 
