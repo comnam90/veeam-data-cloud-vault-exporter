@@ -103,6 +103,14 @@ describe('rotateOne', () => {
     expect(result.anomaly).toBe('Expected provider AWS, got AZURE');
     expect(result.response).toEqual(body);
   });
+
+  it('returns Failed when response body is empty (e.g. CSRF rejection)', async () => {
+    const fetchImpl = async () => ({ ok: true, status: 200, json: async () => { throw new SyntaxError('Unexpected end of JSON input'); } });
+    const result = await rotateOne(sampleVault, sampleUrl, { fetch: fetchImpl, now: fixedNow });
+    expect(result.error).toBe('API returned empty response body — rotation may not have occurred');
+    expect(result.response).toBe(null);
+    expect(result.anomaly).toBe(null);
+  });
 });
 
 describe('runRotationPool', () => {
