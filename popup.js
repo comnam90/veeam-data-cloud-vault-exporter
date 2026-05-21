@@ -382,6 +382,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Type-to-confirm: enable the rotate button only when the phrase matches exactly.
+  // See docs/adr/0005-type-to-confirm-fixed-phrase.md.
+  const CONFIRM_PHRASE = 'ROTATE';
+  rotatePhrase.addEventListener('input', () => {
+    if (rotateConfirm.hidden) return;
+    rotateButton.disabled = rotatePhrase.value.trim() !== CONFIRM_PHRASE;
+  });
+
   setRotateStateIdle();
 
   // Keyboard shortcuts
