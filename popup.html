@@ -388,6 +388,15 @@
       background: transparent;
     }
 
+    .tab::before {
+      display: none;
+    }
+
+    .tab:active {
+      box-shadow: none;
+      transform: none;
+    }
+
     .tab.tab-active {
       color: var(--vdc-grey-90);
       border-bottom-color: var(--vdc-green);

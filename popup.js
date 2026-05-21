@@ -204,7 +204,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
     // Enter key triggers export
-    if (e.key === 'Enter' && !exportButton.disabled) {
+    if (e.key === 'Enter' && !exportButton.disabled && exportTab.hidden === false) {
       exportButton.click();
     }
     
