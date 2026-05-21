@@ -214,6 +214,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const rotateBar = document.getElementById('rotateBar');
   const rotateProgressText = document.getElementById('rotateProgressText');
   const rotateStatus = document.getElementById('rotateStatus');
+  const CONFIRM_PHRASE = 'ROTATE';
 
   // Minimal HTML escaper for preview rendering.
   function escapeHtml(s) {
@@ -331,11 +332,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      rotateStatus.textContent = `Enumerating vaults: 0/${awsTenants.length}`;
+      rotateStatus.textContent = `Fetching tenant stats: 0/${awsTenants.length}`;
       const { allTenantStats, failedTenants } = await fetchAllTenantStats(
         awsTenants,
         (done, total) => {
-          rotateStatus.textContent = `Enumerating vaults: ${done}/${total}`;
+          rotateStatus.textContent = `Fetching tenant stats: ${done}/${total}`;
         }
       );
       enumerationFailedTenants = failedTenants;
@@ -459,7 +460,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Type-to-confirm: enable the rotate button only when the phrase matches exactly.
   // See docs/adr/0005-type-to-confirm-fixed-phrase.md.
-  const CONFIRM_PHRASE = 'ROTATE';
   rotatePhrase.addEventListener('input', () => {
     if (rotateConfirm.hidden) return;
     rotateButton.disabled = rotatePhrase.value.trim() !== CONFIRM_PHRASE;

@@ -161,6 +161,18 @@ describe('runRotationPool', () => {
     await runRotationPool(Array(12).fill(0), worker);
     expect(max).toBeLessThanOrEqual(5);
   });
+
+  it('captures result even when worker rejects', async () => {
+    const items = ['ok', 'fail', 'ok2'];
+    const worker = async (x) => {
+      if (x === 'fail') throw new Error('worker exploded');
+      return x;
+    };
+    const results = await runRotationPool(items, worker, { concurrency: 2 });
+    expect(results.length).toBe(3);
+    const failed = results.find(r => r.error);
+    expect(failed?.error).toBe('worker exploded');
+  });
 });
 
 const baseVault = {
