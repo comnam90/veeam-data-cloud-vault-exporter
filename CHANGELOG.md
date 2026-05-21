@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Corrected API response field names (`storageUsageStatistics`, `valueInTebiBytes`) that were causing vault details to show N/A and usage values to show 0 in all exports. This also unblocks vault enumeration for the new Rotate feature.
+- Rotation POSTs now use `chrome.scripting.executeScript` to inject the request into the active tab's page context, satisfying the API's `sec-fetch-site: same-origin` CSRF check. Direct fetches from the extension popup carry `sec-fetch-site: cross-site` and were silently rejected with an empty 200 response.
 
 ### Changed
 - Popup layout now uses tabs (`Export`, `Rotate`); export behaviour is unchanged.
