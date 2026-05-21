@@ -180,6 +180,27 @@ document.addEventListener('DOMContentLoaded', () => {
   // Auto-focus on export button for keyboard accessibility
   exportButton.focus();
 
+  // Tab switcher
+  const tabButtons = document.querySelectorAll('.tab');
+  const exportTab = document.getElementById('exportTab');
+  const rotateTab = document.getElementById('rotateTab');
+
+  function switchTab(name) {
+    tabButtons.forEach(btn => {
+      const isActive = btn.dataset.tab === name;
+      btn.classList.toggle('tab-active', isActive);
+    });
+    exportTab.hidden = name !== 'export';
+    rotateTab.hidden = name !== 'rotate';
+  }
+
+  tabButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      switchTab(btn.dataset.tab);
+    });
+  });
+
   // Keyboard shortcuts
   document.addEventListener('keydown', (e) => {
     // Enter key triggers export
