@@ -180,6 +180,16 @@ describe('runRotationPool', () => {
     expect(results.length).toBe(3);
     const failed = results.find(r => r.error);
     expect(failed?.error).toBe('worker exploded');
+    expect(failed?.vault).toBe('fail');
+    expect(failed?.response).toBe(null);
+    expect(failed?.anomaly).toBe(null);
+    expect(typeof failed?.timestamp).toBe('string');
+  });
+
+  it('clamps concurrency to 1 when given 0 or negative', async () => {
+    const order = [];
+    const results = await runRotationPool([1, 2, 3], async (n) => { order.push(n); return n; }, { concurrency: 0 });
+    expect(results.length).toBe(3);
   });
 });
 

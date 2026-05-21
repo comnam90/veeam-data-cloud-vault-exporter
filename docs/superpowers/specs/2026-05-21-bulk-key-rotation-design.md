@@ -44,11 +44,11 @@ Vault provider is determined by the parent tenant's subscription edition: a tena
 - Non-AWS providers (Azure, etc.) — skipped silently in v1.
 - Auto-retry on rate-limit / transient failures — surfaced as Failed rows; user can re-run.
 - Service-worker-backed rotation that survives popup close — see [Future Work](#future-work).
-- Automated test suite — the project does not have one and adding one is out of scope.
+- Automated test suite for DOM/UI/state-machine behaviour — verified manually via Chrome reload. (Pure logic in `lib/` is covered by Vitest; see [ADR 0006](../../adr/0006-adopt-vitest-and-es-modules-for-pure-logic.md).)
 
 ## Architecture
 
-All new logic lives in `popup.js` within the existing single `DOMContentLoaded` handler. This matches the project convention stated in `CLAUDE.md` ("All logic. ~520 lines, single DOMContentLoaded handler. No modules, no bundling.") and keeps the destructive code path reviewable in one place.
+Pure rotation logic lives in `lib/rotation.js` and `lib/csv-utils.js` as ES modules (unit-tested with Vitest). `popup.js` is the orchestration layer: tab switching, state machines, DOM event wiring, and the `chrome.scripting.executeScript` call that issues the key rotation POST in the page context. This split was decided after initial brainstorming via [ADR 0006](../../adr/0006-adopt-vitest-and-es-modules-for-pure-logic.md), which superseded the original single-file convention.
 
 Additions:
 

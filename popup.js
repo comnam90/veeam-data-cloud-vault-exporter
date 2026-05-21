@@ -688,13 +688,16 @@ document.addEventListener('DOMContentLoaded', () => {
     const total = tenants.length;
 
     const statPromises = tenants.map(async (tenant) => {
-      const statsUrl = API_ENDPOINTS.STORAGE_STATS(tenant.id);
-      const response = await fetch(statsUrl);
-      if (!response.ok) throw new Error(`HTTP ${response.status} for tenant "${tenant.displayName}"`);
-      const data = await response.json();
-      completed++;
-      if (onProgress) onProgress(completed, total);
-      return { tenantName: tenant.displayName, tenantId: tenant.id, statsData: data.storageUsageStatistics };
+      try {
+        const statsUrl = API_ENDPOINTS.STORAGE_STATS(tenant.id);
+        const response = await fetch(statsUrl);
+        if (!response.ok) throw new Error(`HTTP ${response.status} for tenant "${tenant.displayName}"`);
+        const data = await response.json();
+        return { tenantName: tenant.displayName, tenantId: tenant.id, statsData: data.storageUsageStatistics };
+      } finally {
+        completed++;
+        if (onProgress) onProgress(completed, total);
+      }
     });
 
     const results = await Promise.allSettled(statPromises);
